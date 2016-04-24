@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
-#include <time.h>
+#include <sys/time.h>
 
 #define METHOD_GET     0
 #define METHOD_POST    1
@@ -32,6 +32,14 @@ char host[1024];
 int port=0;
 int benchtime=0; //测试的时间长度
 int timeout=0; //时间是否过期
+double shortest=100000.0;
+double longest=0.0;
+
+//timeval结构定义为:
+// struct timeval{
+//       long tv_sec; /* 秒数 */
+//       long tv_usec; /* 微秒数 */
+// };
 
 void make_request(const char *url);
 size_t readn(int sock,void *vptr,size_t n);
@@ -111,7 +119,8 @@ int main(int argc,char* argv[]){
             case 'p': port=atoi(optarg);break;
      	}
      }
-     
+     if(port==0)
+         perror("please input port of http server\n");
      if(optind == argc)
      {
      	fprintf(stderr,"missing URL\n");
@@ -125,7 +134,7 @@ int main(int argc,char* argv[]){
      fprintf(stderr,"Damocles - Easy tool for web server test"PROGRAM_VERSION"\n"
      	            "Copyright (c) Hunter Zhao Open Source Software.\r\n");
      make_request(argv[optind]);
-     
+
      startTest();
   //    int sock=socket_connect(host,port);
   //    if(sock==-1) {
@@ -152,11 +161,11 @@ int main(int argc,char* argv[]){
 }
 
 static int startTest(void){  //外部文件无法调用
-     //socket 
+     //socket
      int i,j,k;
      pid_t pid=0;
      FILE *f;
-     
+
      //返回套接字
      i=socket_connect(host,port);
      if(i==-1){
@@ -164,7 +173,7 @@ static int startTest(void){  //外部文件无法调用
         return;
      }
      close(i);
-     
+
      if(pipe(msgPipe))
      {
         perror("pipe failed.\n");
@@ -186,11 +195,23 @@ static int startTest(void){  //外部文件无法调用
         fprintf(stderr,"error occur forking.%d\n",i);
         return 3;
      }
-     
+
      if(pid==(pid_t)0)
      {
         success=0;failed=0;bytes=0;
+
+
+
         test(host,port,request);
+
+
+
+        // timeEnd= clock();
+        // int period=timeEnd-timeBegin;
+        // shortest=shortest<period?shortest:period;
+        // longest =longest >period?longest :period;
+         //printf("%f\n",timeuse);
+
         //printf("%d %d %d\n",success,failed,bytes);
         f=fdopen(msgPipe[1],"w"); //用于由创建管道和网络通信通道函数获得的描述符,该类特殊文件不能使用fopen
         if(f==NULL)
@@ -198,8 +219,8 @@ static int startTest(void){  //外部文件无法调用
             perror("open pip failed.\n");
             return 3;
         }
-
-        fprintf(f,"%d %d %d\n",success,failed,bytes);
+        fprintf(f,"%d %d %d %f %f\n",success,failed,bytes,shortest,longest);
+        //printf("%f %f\n",shortest,longest);
         fclose(f);
 
         return 0;
@@ -216,11 +237,21 @@ static int startTest(void){  //外部文件无法调用
         failed=0; //失败请求数
         bytes=0;  //传输字节数
         int su=0,fa=0,by=0;
+        int client=0;
+        time_t timeBegin, timeEnd;
+        timeBegin = time(NULL);
+        double Longest=0.0,Shortest=0.0;
         while(1)
         {
-            int rc=fscanf(f,"%d %d %d",&su,&fa,&by);//返回读入参数个数，失败返回-1
-            printf("%d %d %d\n",su,fa,by);
-            if(rc<2)
+            int rc=fscanf(f,"%d %d %d %lf %lf\n",&su,&fa,&by,&Shortest,&Longest);//返回读入参数个数，失败返回-1
+            //printf("%f %f\n",Shortest,Longest);
+            shortest=shortest<Shortest?shortest:Shortest;
+            longest =longest >Longest?longest :Longest;
+            //printf("%d %d %d\n",su,fa,by);
+            //printf(">");
+            if(client %100==0)
+                printf("[%5.2f\%]\n",(client*1.0/clients)*100);
+            if(rc<5)
             {
                 perror("some of children died.\n");
                 break;
@@ -228,13 +259,19 @@ static int startTest(void){  //外部文件无法调用
             success+=su;
             failed+=fa;
             bytes+=by;
-            if(--clients==0) break;
+            if(++client==clients-1) break;
         }
         fclose(f);
+        timeEnd=time(NULL);
+        int timeSum=timeEnd-timeBegin;
+        printf("\ntotal time:%d s benchtime: %d\n",timeSum,benchtime);
         //绘制一个进度表***
         //printf("%d %d %d %d\n",success,failed,bytes,benchtime);
-        printf("\nspeed=%d pages/min,%d bytes/sec.\nRequests: %d success,%d failed\n",
-            (int)((success+failed)/(benchtime/60.0f)),(int)(bytes/(float)benchtime),success,failed);
+        printf("\nspeed=%d pages/min,%.3f MB/sec.\nRequests: %d success,%d failed\n",
+            (int)((success+failed)/(timeSum/60.0f)),((bytes/(float)timeSum)/(8*1024)),success,failed);
+
+        printf("\nthe shortest time to open the webpage is %f ms\n",shortest);
+        printf("the longest time to open the webpage is %f ms\n",longest);
      }
      return i;
 }
@@ -261,7 +298,7 @@ void test(const char *host,const int port,const char *request){
         //timeout=1 说明时间已经过期
         if (timeout)
         {
-            printf("time is out\n");
+            //printf("time is out\n");
             if(failed>0)
             {
                 //是超时导致的failed 不算一次failed
@@ -269,6 +306,9 @@ void test(const char *host,const int port,const char *request){
             }
             return;
         }
+
+        struct timeval starttime,endtime;
+        gettimeofday(&starttime,0);
 
         s=socket_connect(host,port);
         if(s<0)
@@ -283,7 +323,7 @@ void test(const char *host,const int port,const char *request){
             close(s);
             continue;
         }
-        
+
         if(force ==0) //force==0 读取服务器回复
         {
             i=readn(s,buf,sizeof(buf));
@@ -296,7 +336,10 @@ void test(const char *host,const int port,const char *request){
             }
             else
                 if(i==0) break;
-                else bytes+=i;
+                else {
+                  bytes+=i;
+
+                }
         }
 
         if(close(s))
@@ -305,6 +348,14 @@ void test(const char *host,const int port,const char *request){
             continue;
         }
         success++;
+
+        gettimeofday(&endtime,0);
+        double timeuse = 1000000*(endtime.tv_sec - starttime.tv_sec) + endtime.tv_usec - starttime.tv_usec;
+        timeuse /=1000;//除以1000则进行毫秒计时
+
+        shortest=shortest<timeuse?shortest:timeuse;
+        longest =longest >timeuse?longest :timeuse;
+        //printf("%f\n",timeuse);
     }
 }
 
@@ -317,7 +368,7 @@ void make_request(const char *url){
 		case METHOD_TRACE:sprintf(request,"TRACE ",6); break;
 		case METHOD_OPTIONS:sprintf(request,"OPTIONS ",8); break;
 	}
-    
+
     char *p=strchr(url,'/');
 
 	strcat(request,p);

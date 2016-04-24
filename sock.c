@@ -10,8 +10,10 @@
 
 int socket_connect(const char* ip,int port){
      int sock=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
-     if(sock<0)
-     	  return sock;
+     if(sock<0){
+       printf("sock init failed\n");
+        return sock;
+     }
      struct sockaddr_in seraddr;
      struct hostent *hp;
      memset(&seraddr,0,sizeof(seraddr));
@@ -26,7 +28,7 @@ int socket_connect(const char* ip,int port){
      //     printf("%s",inet_ntop(hp->h_addrtype, hp->h_addr, str, sizeof(str)));
      //     memcpy(&seraddr.sin_addr, hp->h_addr, hp->h_length);
      // }
-     
+
      hp = gethostbyname(ip);
      if (hp == NULL)
             return -1;
@@ -37,7 +39,7 @@ int socket_connect(const char* ip,int port){
 
      if(connect(sock,(struct sockaddr *)&seraddr,sizeof(seraddr))<0)
      	  return -1;
-    
+
      /*
      char buf[255];
      write(sock,buf,sizeof(buf));

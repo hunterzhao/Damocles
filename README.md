@@ -12,8 +12,11 @@
 
 ##例子：
 使用两个线程，3秒内不断的访问www.baidu.com
-` ./damo -c 2 -t 3 -p 80 www.baidu.com/`
+
+`./damo -c 2 -t 3 -p 80 www.baidu.com/`
+
 输出结果包括访问的速度，访问成功与失败的次数
+
 ![结果](https://github.com/hunterzhao/Damocles/blob/master/pic/result.png?raw=true)
 
 ##输出说明
